@@ -1,34 +1,61 @@
 import { Router } from 'express';
-import ProductManager from '/managers/ProductManager.js';
+import ProductModel from '../models/product.model.js';
 
 const router = Router();
-const manager = new ProductManager('./src/data/products.json');
 
 router.get('/', async (req, res) => {
-    const products = await manager.getProducts();
-    res.json(products);
+    try {
+        const products = await ProductModel.find().lean();
+        res.json({ status: 'success', payload: products });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: error.message });
+    }
 });
 
 router.get('/:pid', async (req, res) => {
-    const product = await manager.getProductById(Number(req.params.pid));
-    if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
-    res.json(product);
+    try {
+        const product = await ProductModel.findById(req.params.pid).lean();
+        if (!product) return res.status(404).json({ status: 'error', message: 'Producto no encontrado' });
+
+        res.json({ status: 'success', payload: product });
+    } catch (error) {
+        res.status(400).json({ status: 'error', message: 'Id de producto invalido' });
+    }
 });
 
 router.post('/', async (req, res) => {
-    const newProduct = await manager.addProduct(req.body);
-    res.status(201).json(newProduct);
+    try {
+        const newProduct = await ProductModel.create(req.body);
+        res.status(201).json({ status: 'success', payload: newProduct });
+    } catch (error) {
+        res.status(400).json({ status: 'error', message: error.message });
+    }
 });
 
 router.put('/:pid', async (req, res) => {
-    const updated = await manager.updateProduct(Number(req.params.pid), req.body);
-    if (!updated) return res.status(404).json({ error: 'Producto no encontrado' });
-    res.json(updated);
+    try {
+        const updated = await ProductModel.findByIdAndUpdate(req.params.pid, req.body, {
+            new: true,
+            runValidators: true
+        });
+
+        if (!updated) return res.status(404).json({ status: 'error', message: 'Producto no encontrado' });
+
+        res.json({ status: 'success', payload: updated });
+    } catch (error) {
+        res.status(400).json({ status: 'error', message: error.message });
+    }
 });
 
 router.delete('/:pid', async (req, res) => {
-    await manager.deleteProduct(Number(req.params.pid));
-    res.json({ message: 'Producto eliminado' });
+    try {
+        const deleted = await ProductModel.findByIdAndDelete(req.params.pid);
+        if (!deleted) return res.status(404).json({ status: 'error', message: 'Producto no encontrado' });
+
+        res.json({ status: 'success', message: 'Producto eliminado' });
+    } catch (error) {
+        res.status(400).json({ status: 'error', message: 'Id de producto invalido' });
+    }
 });
 
 export default router;

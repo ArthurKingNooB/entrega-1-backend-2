@@ -1,29 +1,53 @@
 import { Router } from 'express';
-import CartManager from '/managers/CartManager.js';
+import CartModel from '../models/cart.model.js';
+import ProductModel from '../models/product.model.js';
 
 const router = Router();
-const manager = new CartManager('./src/data/carts.json');
 
 router.post('/', async (req, res) => {
-    const cart = await manager.createCart();
-    res.status(201).json(cart);
+    try {
+        const cart = await CartModel.create({ products: [] });
+        res.status(201).json({ status: 'success', payload: cart });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: error.message });
+    }
 });
 
 router.get('/:cid', async (req, res) => {
-    const cart = await manager.getCartById(Number(req.params.cid));
-    if (!cart) return res.status(404).json({ error: 'Carrito no encontrado' });
-    res.json(cart.products);
+    try {
+        const cart = await CartModel.findById(req.params.cid).populate('products.product').lean();
+        if (!cart) return res.status(404).json({ status: 'error', message: 'Carrito no encontrado' });
+
+        res.json({ status: 'success', payload: cart });
+    } catch (error) {
+        res.status(400).json({ status: 'error', message: 'Id de carrito invalido' });
+    }
 });
 
 router.post('/:cid/product/:pid', async (req, res) => {
-    const updatedCart = await manager.addProductToCart(
-        Number(req.params.cid),
-        Number(req.params.pid)
-    );
+    try {
+        const { cid, pid } = req.params;
+        const cart = await CartModel.findById(cid);
+        if (!cart) return res.status(404).json({ status: 'error', message: 'Carrito no encontrado' });
 
-    if (!updatedCart) return res.status(404).json({ error: 'Carrito no encontrado' });
+        const product = await ProductModel.findById(pid);
+        if (!product) return res.status(404).json({ status: 'error', message: 'Producto no encontrado' });
 
-    res.json(updatedCart);
+        const productIndex = cart.products.findIndex(item => item.product.toString() === pid);
+
+        if (productIndex === -1) {
+            cart.products.push({ product: pid, quantity: 1 });
+        } else {
+            cart.products[productIndex].quantity += 1;
+        }
+
+        await cart.save();
+
+        const updatedCart = await CartModel.findById(cid).populate('products.product').lean();
+        res.json({ status: 'success', payload: updatedCart });
+    } catch (error) {
+        res.status(400).json({ status: 'error', message: error.message });
+    }
 });
 
 export default router;
