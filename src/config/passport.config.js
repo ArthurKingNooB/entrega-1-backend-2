@@ -1,9 +1,9 @@
 import passport from 'passport';
 import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
 import { Strategy as LocalStrategy } from 'passport-local';
-import CartModel from '../models/cart.model.js';
 import UserModel from '../models/user.model.js';
-import { createHash, isValidPassword } from '../utils/bcrypt.js';
+import userRepository from '../repositories/user.repository.js';
+import { isValidPassword } from '../utils/bcrypt.js';
 import { getJwtSecret } from '../utils/jwt.js';
 
 const cookieExtractor = req => {
@@ -33,24 +33,21 @@ const initializePassport = () => {
                 return done(null, false, { message: 'Faltan campos obligatorios' });
             }
 
-            const exists = await UserModel.findOne({ email });
-            if (exists) {
-                return done(null, false, { message: 'El email ya esta registrado' });
-            }
-
-            const cart = await CartModel.create({ products: [] });
-            const user = await UserModel.create({
+            const user = await userRepository.createUser({
                 first_name,
                 last_name,
                 email,
                 age,
-                password: createHash(password),
-                cart: cart._id,
+                password,
                 role
             });
 
             return done(null, user);
         } catch (error) {
+            if (error.message === 'El email ya esta registrado') {
+                return done(null, false, { message: error.message });
+            }
+
             return done(error);
         }
     }));

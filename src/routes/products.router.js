@@ -1,11 +1,13 @@
 import { Router } from 'express';
-import ProductModel from '../models/product.model.js';
+import productRepository from '../repositories/product.repository.js';
+import { passportCall } from '../middlewares/passportCall.js';
+import { authorization } from '../middlewares/authorization.js';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
     try {
-        const products = await ProductModel.find().lean();
+        const products = await productRepository.getProducts();
         res.json({ status: 'success', payload: products });
     } catch (error) {
         res.status(500).json({ status: 'error', message: error.message });
@@ -14,7 +16,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:pid', async (req, res) => {
     try {
-        const product = await ProductModel.findById(req.params.pid).lean();
+        const product = await productRepository.getProductById(req.params.pid);
         if (!product) return res.status(404).json({ status: 'error', message: 'Producto no encontrado' });
 
         res.json({ status: 'success', payload: product });
@@ -23,21 +25,18 @@ router.get('/:pid', async (req, res) => {
     }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', passportCall('current'), authorization('admin'), async (req, res) => {
     try {
-        const newProduct = await ProductModel.create(req.body);
+        const newProduct = await productRepository.createProduct(req.body);
         res.status(201).json({ status: 'success', payload: newProduct });
     } catch (error) {
         res.status(400).json({ status: 'error', message: error.message });
     }
 });
 
-router.put('/:pid', async (req, res) => {
+router.put('/:pid', passportCall('current'), authorization('admin'), async (req, res) => {
     try {
-        const updated = await ProductModel.findByIdAndUpdate(req.params.pid, req.body, {
-            new: true,
-            runValidators: true
-        });
+        const updated = await productRepository.updateProduct(req.params.pid, req.body);
 
         if (!updated) return res.status(404).json({ status: 'error', message: 'Producto no encontrado' });
 
@@ -47,9 +46,9 @@ router.put('/:pid', async (req, res) => {
     }
 });
 
-router.delete('/:pid', async (req, res) => {
+router.delete('/:pid', passportCall('current'), authorization('admin'), async (req, res) => {
     try {
-        const deleted = await ProductModel.findByIdAndDelete(req.params.pid);
+        const deleted = await productRepository.deleteProduct(req.params.pid);
         if (!deleted) return res.status(404).json({ status: 'error', message: 'Producto no encontrado' });
 
         res.json({ status: 'success', message: 'Producto eliminado' });

@@ -1,12 +1,14 @@
 import { Router } from 'express';
-import CartModel from '../models/cart.model.js';
-import ProductModel from '../models/product.model.js';
+import cartRepository from '../repositories/cart.repository.js';
+import purchaseService from '../services/purchase.service.js';
+import { passportCall } from '../middlewares/passportCall.js';
+import { authorization } from '../middlewares/authorization.js';
 
 const router = Router();
 
 router.post('/', async (req, res) => {
     try {
-        const cart = await CartModel.create({ products: [] });
+        const cart = await cartRepository.createCart();
         res.status(201).json({ status: 'success', payload: cart });
     } catch (error) {
         res.status(500).json({ status: 'error', message: error.message });
@@ -15,7 +17,7 @@ router.post('/', async (req, res) => {
 
 router.get('/:cid', async (req, res) => {
     try {
-        const cart = await CartModel.findById(req.params.cid).populate('products.product').lean();
+        const cart = await cartRepository.getCartById(req.params.cid);
         if (!cart) return res.status(404).json({ status: 'error', message: 'Carrito no encontrado' });
 
         res.json({ status: 'success', payload: cart });
@@ -24,29 +26,37 @@ router.get('/:cid', async (req, res) => {
     }
 });
 
-router.post('/:cid/product/:pid', async (req, res) => {
+router.post('/:cid/product/:pid', passportCall('current'), authorization('user'), async (req, res) => {
     try {
         const { cid, pid } = req.params;
-        const cart = await CartModel.findById(cid);
-        if (!cart) return res.status(404).json({ status: 'error', message: 'Carrito no encontrado' });
+        const userCartId = req.user.cart?._id?.toString() || req.user.cart?.toString();
 
-        const product = await ProductModel.findById(pid);
-        if (!product) return res.status(404).json({ status: 'error', message: 'Producto no encontrado' });
-
-        const productIndex = cart.products.findIndex(item => item.product.toString() === pid);
-
-        if (productIndex === -1) {
-            cart.products.push({ product: pid, quantity: 1 });
-        } else {
-            cart.products[productIndex].quantity += 1;
+        if (userCartId !== cid) {
+            return res.status(403).json({ status: 'error', message: 'Solo puede modificar su propio carrito' });
         }
 
-        await cart.save();
+        const updatedCart = await cartRepository.addProductToCart(cid, pid);
+        if (!updatedCart) return res.status(404).json({ status: 'error', message: 'Carrito no encontrado' });
 
-        const updatedCart = await CartModel.findById(cid).populate('products.product').lean();
         res.json({ status: 'success', payload: updatedCart });
     } catch (error) {
-        res.status(400).json({ status: 'error', message: error.message });
+        res.status(error.statusCode || 400).json({ status: 'error', message: error.message });
+    }
+});
+
+router.post('/:cid/purchase', passportCall('current'), authorization('user'), async (req, res) => {
+    try {
+        const { cid } = req.params;
+        const userCartId = req.user.cart?._id?.toString() || req.user.cart?.toString();
+
+        if (userCartId !== cid) {
+            return res.status(403).json({ status: 'error', message: 'Solo puede comprar su propio carrito' });
+        }
+
+        const result = await purchaseService.purchaseCart(cid, req.user.email);
+        res.json({ status: 'success', payload: result });
+    } catch (error) {
+        res.status(error.statusCode || 400).json({ status: 'error', message: error.message });
     }
 });
 
